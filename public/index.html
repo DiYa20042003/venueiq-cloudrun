@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VenueIQ — Command Center</title>
+<link rel="stylesheet" href="style.css">
+<script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+
+<div id="toast"><span id="toast-icon">✓</span><span id="toast-msg">Update sent</span></div>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🏟</div>
+    <div class="logo-text">Venue<span class="accent-text">IQ</span></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:24px">
+    <div style="text-align:right">
+      <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--accent);text-shadow:var(--accent-glow)" id="match-score">2 — 1</div>
+      <div style="font-size:12px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:1px"><span id="match-time">74</span>' · City Stadium</div>
+    </div>
+    <div class="ws-status">
+      <div class="ws-dot" id="ws-dot"></div>
+      <span id="ws-label">Connecting…</span>
+    </div>
+    <div class="live-badge"><span class="live-dot"></span>LIVE</div>
+  </div>
+</header>
+
+<div class="app-container">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <button class="nav-item active" data-panel="overview"><span class="nav-icon">⎈</span> Overview</button>
+    <button class="nav-item" data-panel="crowd"><span class="nav-icon">🌊</span> Crowd Flow</button>
+    <button class="nav-item" data-panel="queues"><span class="nav-icon">⑆</span> Queue Management</button>
+    <button class="nav-item" data-panel="concessions"><span class="nav-icon">🍔</span> Concessions</button>
+    <button class="nav-item" data-panel="gates"><span class="nav-icon">⛩</span> Gates & Security</button>
+    <button class="nav-item" data-panel="alerts"><span class="nav-icon">⚠️</span> Alerts</button>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="main-content">
+    
+    <!-- OVERVIEW -->
+    <div class="panel active" id="panel-overview">
+      <div class="stats-strip">
+        <div class="stat-card" style="--accent-color:var(--accent)">
+          <div class="stat-label">Attendance</div>
+          <div class="stat-value" style="color:var(--accent)" id="s-attendance">—</div>
+          <div class="stat-sub" id="s-capacity-sub">of 52,000 capacity</div>
+        </div>
+        <div class="stat-card" style="--accent-color:var(--purple)">
+          <div class="stat-label">Avg Wait</div>
+          <div class="stat-value" style="color:var(--purple)" id="s-avgwait">—</div>
+          <div class="stat-sub">minutes across gates</div>
+        </div>
+        <div class="stat-card" style="--accent-color:var(--warn)">
+          <div class="stat-label">Active Alerts</div>
+          <div class="stat-value" style="color:var(--warn)" id="s-alerts">—</div>
+          <div class="stat-sub" id="s-alerts-sub">Loading…</div>
+        </div>
+        <div class="stat-card" style="--accent-color:var(--success)">
+          <div class="stat-label">Revenue</div>
+          <div class="stat-value" style="color:var(--success)">₹<span id="s-revenue">8.4M</span></div>
+          <div class="stat-sub">Concessions + merch</div>
+        </div>
+        <div class="stat-card" style="--accent-color:var(--danger)">
+          <div class="stat-label">Gates Active</div>
+          <div class="stat-value" style="color:var(--danger)" id="s-gates">—</div>
+          <div class="stat-sub">of 16 total</div>
+        </div>
+      </div>
+
+      <div class="grid-21">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Live Venue Heat Map</span>
+            <span class="pill pill-teal">Real-time</span>
+          </div>
+          <div class="venue-svg-container">
+            <svg width="100%" height="100%" viewBox="0 0 600 340">
+              <!-- Field -->
+              <rect x="150" y="70" width="300" height="200" rx="4" fill="rgba(0, 230, 118, 0.05)" stroke="rgba(0, 230, 118, 0.2)" stroke-width="2"/>
+              <ellipse cx="300" cy="170" rx="50" ry="35" fill="none" stroke="rgba(0, 230, 118, 0.2)" stroke-width="2"/>
+              <line x1="150" y1="170" x2="450" y2="170" stroke="rgba(0, 230, 118, 0.2)" stroke-width="1"/>
+              <circle cx="300" cy="170" r="4" fill="rgba(0, 230, 118, 0.4)"/>
+              <rect x="150" y="140" width="30" height="60" fill="none" stroke="rgba(0, 230, 118, 0.2)" stroke-width="2"/>
+              <rect x="420" y="140" width="30" height="60" fill="none" stroke="rgba(0, 230, 118, 0.2)" stroke-width="2"/>
+              
+              <!-- Stands -->
+              <rect id="map-north" class="map-zone" x="140" y="10" width="320" height="55" rx="8" fill="rgba(0,240,255,0.1)" stroke="rgba(0,240,255,0.4)" stroke-width="2"/>
+              <rect id="map-south" class="map-zone" x="140" y="275" width="320" height="55" rx="8" fill="rgba(255,171,0,0.1)" stroke="rgba(255,171,0,0.4)" stroke-width="2"/>
+              <rect id="map-west" class="map-zone" x="10" y="60" width="125" height="220" rx="8" fill="rgba(213,0,249,0.1)" stroke="rgba(213,0,249,0.4)" stroke-width="2"/>
+              <rect id="map-east" class="map-zone" x="465" y="60" width="125" height="220" rx="8" fill="rgba(255,23,68,0.1)" stroke="rgba(255,23,68,0.4)" stroke-width="2"/>
+              
+              <!-- Labels -->
+              <text id="lbl-north" x="300" y="36" text-anchor="middle" fill="#00f0ff" font-size="12" font-family="var(--mono)" font-weight="700">NORTH 82%</text>
+              <text id="lbl-south" x="300" y="305" text-anchor="middle" fill="#ffab00" font-size="12" font-family="var(--mono)" font-weight="700">SOUTH 94%</text>
+              <text id="lbl-west-n" x="72" y="165" text-anchor="middle" fill="#d500f9" font-size="12" font-family="var(--mono)" font-weight="700">WEST</text>
+              <text id="lbl-west-p" x="72" y="180" text-anchor="middle" fill="#d500f9" font-size="12" font-family="var(--mono)">68%</text>
+              <text id="lbl-east-n" x="527" y="165" text-anchor="middle" fill="#ff1744" font-size="12" font-family="var(--mono)" font-weight="700">EAST</text>
+              <text id="lbl-east-p" x="527" y="180" text-anchor="middle" fill="#ff1744" font-size="12" font-family="var(--mono)">97%</text>
+              
+              <g id="crowd-dots"></g>
+            </svg>
+          </div>
+        </div>
+        
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Zone Occupancy</span>
+            <span class="pill pill-amber">Live</span>
+          </div>
+          <div id="zone-bars"></div>
+          <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border)">
+            <div style="font-size:14px;font-weight:600;margin-bottom:12px;color:var(--text)">Actionable Insights</div>
+            <div id="recommendations" style="font-size:13px;color:var(--muted);line-height:1.8"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-3">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Attendance Trend</span></div>
+          <canvas id="attendance-chart" style="height:120px;width:100%"></canvas>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Recent Alerts</span>
+            <button class="btn btn-sm" onclick="switchTab('alerts')">View All</button>
+          </div>
+          <div id="recent-alerts-mini"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Event Timeline</span></div>
+          <div class="timeline" id="match-timeline"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CROWD FLOW -->
+    <div class="panel" id="panel-crowd">
+      <div class="card-header" style="margin-bottom: 24px;">
+        <h2 style="font-size: 24px; font-weight: 600;">Crowd Flow Analysis</h2>
+        <div style="display:flex;gap:12px">
+          <button class="btn" onclick="apiPost('/api/alerts',{type:'info',msg:'Exit simulation started — dispersal routes activated',zone:'All Zones'})">Simulate Exit</button>
+          <button class="btn btn-accent" onclick="apiPost('/api/gates/open-all',{})">Open All Gates</button>
+        </div>
+      </div>
+
+      <div class="stats-strip">
+        <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-label">Total Footfall</div><div class="stat-value" style="color:var(--accent)" id="cf-footfall">—</div><div class="stat-sub">In-venue attendance</div></div>
+        <div class="stat-card" style="--accent-color:var(--purple)"><div class="stat-label">Entry Rate</div><div class="stat-value" style="color:var(--purple)">1,240<span style="font-size:16px">/hr</span></div><div class="stat-sub">Normal flow</div></div>
+        <div class="stat-card" style="--accent-color:var(--danger)"><div class="stat-label">Peak Zone</div><div class="stat-value" style="color:var(--danger)">East</div><div class="stat-sub">97% occupancy</div></div>
+        <div class="stat-card" style="--accent-color:var(--warn)"><div class="stat-label">Gate→Seat Time</div><div class="stat-value" style="color:var(--warn)">3.8<span style="font-size:16px">m</span></div><div class="stat-sub">Average movement</div></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card"><div class="card-header"><span class="card-title">Flow Rate per Gate Cluster</span></div><canvas id="flow-chart" style="height:200px;width:100%"></canvas></div>
+        <div class="card"><div class="card-header"><span class="card-title">Congestion Hotspots</span><button class="btn btn-sm btn-accent" onclick="apiPost('/api/alerts',{type:'info',msg:'Dispersal routes activated — staff redirected',zone:'East Stand'})">Send Dispersal</button></div><div id="hotspot-list"></div></div>
+      </div>
+      <div class="card"><div class="card-header"><span class="card-title">Sector Movement Heatmap (Last 15 min)</span></div><div id="sector-heatmap" style="display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-top:12px"></div></div>
+    </div>
+
+    <!-- QUEUES -->
+    <div class="panel" id="panel-queues">
+      <div class="card-header" style="margin-bottom: 24px;">
+        <h2 style="font-size: 24px; font-weight: 600;">Queue Management</h2>
+        <button class="btn btn-accent" onclick="apiPost('/api/queues/rebalance',{})">Auto-Rebalance</button>
+      </div>
+
+      <div class="stats-strip">
+        <div class="stat-card" style="--accent-color:var(--success)"><div class="stat-label">Shortest Queue</div><div class="stat-value" style="color:var(--success)" id="q-min">—</div><div class="stat-sub" id="q-min-label">Loading…</div></div>
+        <div class="stat-card" style="--accent-color:var(--danger)"><div class="stat-label">Longest Queue</div><div class="stat-value" style="color:var(--danger)" id="q-max">—</div><div class="stat-sub" id="q-max-label">Loading…</div></div>
+        <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-label">Staff Deployed</div><div class="stat-value" style="color:var(--accent)">48</div><div class="stat-sub">Active officers</div></div>
+      </div>
+
+      <div class="grid-12">
+        <div class="card"><div class="card-header"><span class="card-title">All Queue Points</span></div><div id="queue-list"></div></div>
+        <div class="card">
+            <div class="card-header"><span class="card-title">Smart Routing System</span></div>
+            <div style="font-size:13px;color:var(--muted);margin-bottom:16px">The system has identified bottlenecks. Redirect attendees via app push notifications.</div>
+            <div style="display:flex;flex-direction:column;gap:12px" id="routing-suggestions"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONCESSIONS -->
+    <div class="panel" id="panel-concessions">
+      <div class="card-header" style="margin-bottom: 24px;">
+        <h2 style="font-size: 24px; font-weight: 600;">F&B Operations</h2>
+        <button class="btn btn-accent" onclick="showToast('Inventory sync complete','success')">Sync Inventory</button>
+      </div>
+
+      <div class="stats-strip">
+        <div class="stat-card" style="--accent-color:var(--success)"><div class="stat-label">Total Revenue</div><div class="stat-value" style="color:var(--success)">₹8.4M</div><div class="stat-sub">+22% vs last match</div></div>
+        <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-label">Orders Served</div><div class="stat-value" style="color:var(--accent)">14,203</div><div class="stat-sub">Avg ₹592 per order</div></div>
+        <div class="stat-card" style="--accent-color:var(--warn)"><div class="stat-label">Low Stock Alerts</div><div class="stat-value" style="color:var(--warn)" id="low-stock-count">—</div><div class="stat-sub">Items need restock</div></div>
+        <div class="stat-card" style="--accent-color:var(--purple)"><div class="stat-label">Avg Order Time</div><div class="stat-value" style="color:var(--purple)">2.3<span style="font-size:16px">m</span></div><div class="stat-sub">Below 3min target</div></div>
+      </div>
+
+      <div class="card" style="margin-bottom: 24px;">
+          <div class="card-header"><span class="card-title">Concession Stand Status</span></div>
+          <div style="overflow-x:auto"><table class="data-table" id="concession-table"></table></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card"><div class="card-header"><span class="card-title">Top Selling Items</span></div><canvas id="menu-chart" style="height:180px;width:100%"></canvas></div>
+        <div class="card"><div class="card-header"><span class="card-title">Critical Stock Alerts</span><button class="btn btn-sm btn-accent" onclick="restockAll()">Order All</button></div><div id="stock-alerts"></div></div>
+      </div>
+    </div>
+
+    <!-- GATES -->
+    <div class="panel" id="panel-gates">
+      <div class="card-header" style="margin-bottom: 24px;">
+        <h2 style="font-size: 24px; font-weight: 600;">Security Control</h2>
+        <div style="display:flex;gap:12px">
+            <button class="btn" onclick="apiPost('/api/gates/close-all',{})">Lockdown All</button>
+            <button class="btn btn-accent" onclick="apiPost('/api/gates/open-all',{})">Open All Gates</button>
+        </div>
+      </div>
+
+      <div class="stats-strip">
+        <div class="stat-card" style="--accent-color:var(--success)"><div class="stat-label">Gates Open</div><div class="stat-value" style="color:var(--success)" id="g-open">—</div></div>
+        <div class="stat-card" style="--accent-color:var(--warn)"><div class="stat-label">High Traffic</div><div class="stat-value" style="color:var(--warn)" id="g-busy">—</div></div>
+        <div class="stat-card" style="--accent-color:var(--danger)"><div class="stat-label">Closed</div><div class="stat-value" style="color:var(--danger)" id="g-closed">—</div></div>
+        <div class="stat-card" style="--accent-color:var(--accent)"><div class="stat-label">Scans / Minute</div><div class="stat-value" style="color:var(--accent)" id="g-scans">—</div></div>
+      </div>
+
+      <div class="card" style="margin-bottom: 24px;">
+          <div class="card-header">
+              <span class="card-title">Gate Status Board</span>
+              <span class="pill pill-teal">Click to toggle</span>
+          </div>
+          <div class="gate-grid" id="gate-grid"></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card"><div class="card-header"><span class="card-title">Security Feed</span><span class="pill pill-green">All Clear</span></div><div id="security-list"></div></div>
+        <div class="card"><div class="card-header"><span class="card-title">Staff Deployment</span></div><div id="staff-list"></div></div>
+      </div>
+    </div>
+
+    <!-- ALERTS -->
+    <div class="panel" id="panel-alerts">
+      <div class="card-header" style="margin-bottom: 24px;">
+        <h2 style="font-size: 24px; font-weight: 600;">System Alerts</h2>
+        <div style="display:flex;gap:12px">
+            <button class="btn" onclick="apiDelete('/api/alerts')">Clear All</button>
+            <button class="btn btn-accent" onclick="simulateAlert()">Simulate Alert</button>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap" id="alert-filter-row">
+        <button class="btn btn-accent active" onclick="filterAlerts('all',this)">All Alerts</button>
+        <button class="btn" onclick="filterAlerts('critical',this)">Critical</button>
+        <button class="btn" onclick="filterAlerts('warn',this)">Warnings</button>
+        <button class="btn" onclick="filterAlerts('info',this)">Info</button>
+      </div>
+
+      <div id="alert-list"></div>
+    </div>
+
+  </main>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
